@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::{collections::HashSet, path::PathBuf};
 use image::ImageReader;
 
 mod image_stats;
@@ -44,6 +44,7 @@ fn display_stats(args: &[String]) {
 }
 
 fn resize(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
+    let now = std::time::SystemTime::now();
     if args.len() != 4 {
         eprintln!("invalid number of arguments");
         std::process::exit(1);
@@ -54,10 +55,12 @@ fn resize(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
     let (height, width) = get_image_dimensions(image_size);
 
     let file_path = args[3].as_str();
-    if !std::path::Path::new(file_path).exists() {
+    let path = std::path::Path::new(file_path);
+    if !path.exists() {
         eprintln!("file path does not exist. Exiting.");
         std::process::exit(1);
     }
+
 
     let img = ImageReader::open(file_path)?.decode()?;
 
@@ -68,23 +71,31 @@ fn resize(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
     let save_result = resized_img.save(output_file_name);
     match save_result {
         Ok(_result) => { 
-            // no-op 
+            println!("Elapsed Time (ms): {}", now.elapsed()?.as_millis());
         },
         Err(error) => eprintln!("failed to save image. {}", error),
     }
     Ok(())
 }
 
-fn create_file_output_name(file_path: &str, size: &str) -> String {
-    let tokens: Vec<&str> = file_path.split("/").collect::<Vec<_>>().into_iter().collect();
-    let file_name = tokens[tokens.len() - 1];
-    // remove the extension
-    let file_name_without_extension = file_name.strip_suffix(".png").unwrap();
-    let output_file_name = format!("{}_{}.png", file_name_without_extension, size);
+fn create_file_output_name(path: &str, size: &str) -> String {
+    let mut file_path = PathBuf::from(path);
+    let file_name = file_path.file_name();
 
-    let file_path_tokens = &tokens[..tokens.len() - 1];
-    let file_path_output = file_path_tokens.join("/");
-    format!("{}/{}", file_path_output, output_file_name)
+    match file_name {
+        Some(file) => {
+            // remove the extension
+            let file_name_without_extension = file.to_str().unwrap().strip_suffix(".png").unwrap();
+            let output_file_name = format!("{}_{}.png", file_name_without_extension, size);
+
+            file_path.pop();
+            file_path.push(output_file_name);
+            String::from(file_path.as_path().as_os_str().to_str().unwrap())
+        }
+        None => { 
+            "".to_string()
+        }
+    }
 }
 
 fn validate_image_size(image_size: &str) {
